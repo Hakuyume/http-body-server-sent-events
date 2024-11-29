@@ -1,3 +1,5 @@
+: this is a test stream
+
 data: some text
 
 data: another message

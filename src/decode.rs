@@ -3,11 +3,13 @@ use futures::Stream;
 use http_body::{Body, Frame};
 use std::collections::VecDeque;
 use std::pin::Pin;
+use std::str::Utf8Error;
 use std::task::{self, Context, Poll};
 
 pub fn decode<B>(body: B) -> Decode<B>
 where
     B: Body<Data = Bytes>,
+    B::Error: From<Utf8Error>,
 {
     Decode {
         body,
@@ -27,6 +29,7 @@ pub struct Decode<B> {
 impl<B> Stream for Decode<B>
 where
     B: Body<Data = Bytes>,
+    B::Error: From<Utf8Error>,
 {
     type Item = Result<Frame<crate::Event>, B::Error>;
 
@@ -43,8 +46,10 @@ where
                         while let Some(at) =
                             this.data.windows(2).position(|window| window == b"\n\n")
                         {
-                            this.events
-                                .push_back(crate::Event::decode(&this.data.split_to(at + 2)));
+                            let data = this.data.split_to(at + 2);
+                            if let Some(event) = crate::Event::decode(&data)? {
+                                this.events.push_back(event);
+                            }
                         }
                     }
                     Err(frame) => break Poll::Ready(Some(Ok(frame.map_data(|_| unreachable!())))),
@@ -52,11 +57,7 @@ where
                 Some(Err(e)) => break Poll::Ready(Some(Err(e))),
                 None => {
                     let data = this.data.split();
-                    if data.is_empty() {
-                        break Poll::Ready(None);
-                    } else {
-                        break Poll::Ready(Some(Ok(Frame::data(crate::Event::decode(&data)))));
-                    }
+                    break Poll::Ready(crate::Event::decode(&data)?.map(Frame::data).map(Ok));
                 }
             }
         }

@@ -1,29 +1,51 @@
-use bytes::{BufMut, Bytes, BytesMut};
+use std::str::{self, Utf8Error};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Event {
-    pub data: Option<Bytes>,
+    pub event: Option<String>,
+    pub data: Option<String>,
+    pub id: Option<String>,
+    pub retry: Option<u64>,
 }
 
 impl Event {
-    pub(crate) fn decode(data: &[u8]) -> Self {
-        let data = data
-            .split(|b| *b == b'\n')
-            .fold(None, |mut data: Option<BytesMut>, line| {
-                if let Some(line) = line.strip_prefix(b"data:") {
-                    let data = match &mut data {
+    pub(crate) fn decode(data: &[u8]) -> Result<Option<Self>, Utf8Error> {
+        let data = str::from_utf8(data)?;
+        let this = data.lines().fold(
+            Self {
+                event: None,
+                data: None,
+                id: None,
+                retry: None,
+            },
+            |mut this, line| {
+                if let Some(value) = line.strip_prefix("event:") {
+                    this.event = Some(value.trim_start().to_owned());
+                }
+                if let Some(line) = line.strip_prefix("data:") {
+                    let data = match &mut this.data {
                         Some(data) => {
-                            data.put_u8(b'\n');
+                            data.push('\n');
                             data
                         }
-                        None => data.insert(BytesMut::new()),
+                        None => this.data.insert(String::new()),
                     };
-                    data.put_slice(line.trim_ascii_start());
+                    data.push_str(line.trim_start());
                 }
-                data
-            });
-        Self {
-            data: data.map(BytesMut::freeze),
+                if let Some(value) = line.strip_prefix("id:") {
+                    this.id = Some(value.trim_start().to_owned());
+                }
+                if let Some(Ok(value)) = line.strip_prefix("retry:").map(str::parse) {
+                    this.event = Some(value);
+                }
+                this
+            },
+        );
+        if this.event.is_some() || this.data.is_some() || this.id.is_some() || this.retry.is_some()
+        {
+            Ok(Some(this))
+        } else {
+            Ok(None)
         }
     }
 }
