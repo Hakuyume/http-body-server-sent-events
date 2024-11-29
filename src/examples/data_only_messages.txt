@@ -1,0 +1,4 @@
+data: some text
+
+data: another message
+data: with two lines

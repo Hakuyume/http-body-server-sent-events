@@ -1,0 +1,8 @@
+event: userconnect
+data: {"username": "bobby", "time": "02:33:48"}
+
+data: Here's a system message of some kind that will get used
+data: to accomplish some task.
+
+event: usermessage
+data: {"username": "bobby", "time": "02:34:11", "text": "Hi everyone."}
