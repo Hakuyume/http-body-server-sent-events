@@ -43,9 +43,8 @@ where
                 Some(Ok(frame)) => match frame.into_data() {
                     Ok(mut data) => {
                         while data.has_remaining() {
-                            let n = data.chunk().len();
                             this.data.extend_from_slice(data.chunk());
-                            data.advance(n);
+                            data.advance(data.chunk().len());
                         }
                         while let Some(at) =
                             this.data.windows(2).position(|window| window == b"\n\n")
