@@ -1,3 +1,4 @@
+use crate::Event;
 use bytes::{Buf, BytesMut};
 use futures::Stream;
 use http_body::{Body, Frame};
@@ -23,7 +24,7 @@ pub struct Decode<B> {
     #[pin]
     body: B,
     data: BytesMut,
-    events: VecDeque<crate::Event>,
+    events: VecDeque<Event>,
 }
 
 impl<B> Stream for Decode<B>
@@ -31,7 +32,7 @@ where
     B: Body,
     B::Error: From<Utf8Error>,
 {
-    type Item = Result<Frame<crate::Event>, B::Error>;
+    type Item = Result<Frame<Event>, B::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mut this = self.project();
@@ -51,7 +52,7 @@ where
                             this.data.windows(2).position(|window| window == b"\n\n")
                         {
                             let data = this.data.split_to(at + 2);
-                            if let Some(event) = crate::Event::decode(&data)? {
+                            if let Some(event) = Event::decode(&data)? {
                                 this.events.push_back(event);
                             }
                         }
@@ -61,7 +62,7 @@ where
                 Some(Err(e)) => break Poll::Ready(Some(Err(e))),
                 None => {
                     let data = this.data.split();
-                    break Poll::Ready(crate::Event::decode(&data)?.map(Frame::data).map(Ok));
+                    break Poll::Ready(Event::decode(&data)?.map(Frame::data).map(Ok));
                 }
             }
         }
