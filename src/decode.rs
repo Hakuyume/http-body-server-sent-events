@@ -1,4 +1,4 @@
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Buf, BytesMut};
 use futures::Stream;
 use http_body::{Body, Frame};
 use std::collections::VecDeque;
@@ -8,7 +8,7 @@ use std::task::{self, Context, Poll};
 
 pub fn decode<B>(body: B) -> Decode<B>
 where
-    B: Body<Data = Bytes>,
+    B: Body,
     B::Error: From<Utf8Error>,
 {
     Decode {
@@ -28,7 +28,7 @@ pub struct Decode<B> {
 
 impl<B> Stream for Decode<B>
 where
-    B: Body<Data = Bytes>,
+    B: Body,
     B::Error: From<Utf8Error>,
 {
     type Item = Result<Frame<crate::Event>, B::Error>;
@@ -41,8 +41,12 @@ where
             }
             match task::ready!(this.body.as_mut().poll_frame(cx)) {
                 Some(Ok(frame)) => match frame.into_data() {
-                    Ok(data) => {
-                        this.data.put_slice(&data);
+                    Ok(mut data) => {
+                        while data.has_remaining() {
+                            let n = data.chunk().len();
+                            this.data.extend_from_slice(data.chunk());
+                            data.advance(n);
+                        }
                         while let Some(at) =
                             this.data.windows(2).position(|window| window == b"\n\n")
                         {
