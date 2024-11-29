@@ -42,6 +42,7 @@ where
             match task::ready!(this.body.as_mut().poll_frame(cx)) {
                 Some(Ok(frame)) => match frame.into_data() {
                     Ok(mut data) => {
+                        this.data.reserve(data.remaining());
                         while data.has_remaining() {
                             this.data.extend_from_slice(data.chunk());
                             data.advance(data.chunk().len());
