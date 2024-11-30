@@ -1,10 +1,11 @@
 use crate::Event;
 use bytes::Bytes;
-use futures::{StreamExt, TryStreamExt};
+use futures::TryStreamExt;
 use http_body::Frame;
 use http_body_util::StreamBody;
 use std::str::Utf8Error;
 use std::time::Duration;
+use tokio_stream::StreamExt;
 
 async fn check<'a, I>(iter: I, expected: &[Event])
 where
@@ -13,12 +14,9 @@ where
     let iter = iter
         .into_iter()
         .map(|chunk| Ok::<_, Utf8Error>(Frame::data(Bytes::copy_from_slice(chunk))));
-    let events = &super::decode(StreamBody::new(futures::stream::iter(iter).then(
-        |chunk| async move {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-            chunk
-        },
-    )))
+    let events = &super::decode(StreamBody::new(
+        futures::stream::iter(iter).throttle(Duration::from_millis(10)),
+    ))
     .try_filter_map(|frame| futures::future::ok(frame.into_data().ok()))
     .try_collect::<Vec<_>>()
     .await
@@ -65,7 +63,7 @@ async fn test_mixing_and_matching(#[case] chunk_size: usize) {
         &[
             Event {
                 event: Some("userconnect".to_owned()),
-                data: Some(r#"{"username": "bobby", "time": "02:33:48"}"#.into()),
+                data: Some(r#"{"username": "bobby", "time": "02:33:48"}"#.to_owned()),
                 id: None,
                 retry: None,
             },
