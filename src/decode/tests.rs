@@ -1,11 +1,10 @@
 use crate::Event;
 use bytes::Bytes;
 use futures::TryStreamExt;
+use futures_test::stream::StreamTestExt;
 use http_body::Frame;
 use http_body_util::StreamBody;
 use std::str::Utf8Error;
-use std::time::Duration;
-use tokio_stream::StreamExt;
 
 async fn check<'a, I>(iter: I, expected: &[Event])
 where
@@ -15,7 +14,7 @@ where
         .into_iter()
         .map(|chunk| Ok::<_, Utf8Error>(Frame::data(Bytes::copy_from_slice(chunk))));
     let events = &super::decode(StreamBody::new(
-        futures::stream::iter(iter).throttle(Duration::from_millis(10)),
+        futures::stream::iter(iter).interleave_pending(),
     ))
     .try_filter_map(|frame| futures::future::ok(frame.into_data().ok()))
     .try_collect::<Vec<_>>()
@@ -28,7 +27,7 @@ where
 #[case(4)]
 #[case(16)]
 #[case(64)]
-#[tokio::test]
+#[futures_test::test]
 // https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#examples
 async fn test_data_only_messages(#[case] chunk_size: usize) {
     check(
@@ -55,7 +54,7 @@ async fn test_data_only_messages(#[case] chunk_size: usize) {
 #[case(4)]
 #[case(16)]
 #[case(64)]
-#[tokio::test]
+#[futures_test::test]
 // https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#examples
 async fn test_mixing_and_matching(#[case] chunk_size: usize) {
     check(
