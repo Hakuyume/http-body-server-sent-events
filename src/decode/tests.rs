@@ -28,7 +28,6 @@ where
 #[case(16)]
 #[case(64)]
 #[futures_test::test]
-// https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#examples
 async fn test_data_only_messages(#[case] chunk_size: usize) {
     check(
         include_bytes!("../examples/data_only_messages.txt").chunks(chunk_size),
@@ -55,7 +54,6 @@ async fn test_data_only_messages(#[case] chunk_size: usize) {
 #[case(16)]
 #[case(64)]
 #[futures_test::test]
-// https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#examples
 async fn test_mixing_and_matching(#[case] chunk_size: usize) {
     check(
         include_bytes!("../examples/mixing_and_matching.txt").chunks(chunk_size),
