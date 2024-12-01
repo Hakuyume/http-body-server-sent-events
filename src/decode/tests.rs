@@ -1,26 +1,41 @@
 use crate::Event;
 use bytes::Bytes;
-use futures::TryStreamExt;
 use futures_test::stream::StreamTestExt;
 use http_body::Frame;
 use http_body_util::StreamBody;
+use std::future;
+use std::pin;
 use std::str::Utf8Error;
 
-async fn check<'a, I>(iter: I, expected: &[Event])
+async fn check<'a, D, E>(data: D, events_expected: E)
 where
-    I: IntoIterator<Item = &'a [u8]>,
+    D: IntoIterator<Item = &'a [u8]>,
+    E: IntoIterator<Item = Event>,
 {
-    let iter = iter
-        .into_iter()
-        .map(|chunk| Ok::<_, Utf8Error>(Frame::data(Bytes::copy_from_slice(chunk))));
-    let events = &super::decode(StreamBody::new(
-        futures::stream::iter(iter).interleave_pending(),
-    ))
-    .try_filter_map(|frame| futures::future::ok(frame.into_data().ok()))
-    .try_collect::<Vec<_>>()
-    .await
-    .unwrap();
-    assert_eq!(events, expected);
+    let body = StreamBody::new(
+        futures::stream::iter(
+            data.into_iter()
+                .map(Bytes::copy_from_slice)
+                .map(Frame::data)
+                .map(Ok::<_, Utf8Error>),
+        )
+        .interleave_pending(),
+    );
+    let mut events_actual = pin::pin!(super::decode(body));
+    for event_expected in events_expected {
+        assert_eq!(
+            future::poll_fn(|cx| events_actual.as_mut().poll_frame(cx))
+                .await
+                .unwrap()
+                .unwrap()
+                .into_data()
+                .unwrap(),
+            event_expected,
+        )
+    }
+    assert!(future::poll_fn(|cx| events_actual.as_mut().poll_frame(cx))
+        .await
+        .is_none())
 }
 
 #[rstest::rstest]
@@ -31,7 +46,7 @@ where
 async fn test_data_only_messages(#[case] chunk_size: usize) {
     check(
         include_bytes!("../examples/data_only_messages.txt").chunks(chunk_size),
-        &[
+        [
             Event {
                 event: None,
                 data: Some("some text".to_owned()),
@@ -57,7 +72,7 @@ async fn test_data_only_messages(#[case] chunk_size: usize) {
 async fn test_mixing_and_matching(#[case] chunk_size: usize) {
     check(
         include_bytes!("../examples/mixing_and_matching.txt").chunks(chunk_size),
-        &[
+        [
             Event {
                 event: Some("userconnect".to_owned()),
                 data: Some(r#"{"username": "bobby", "time": "02:33:48"}"#.to_owned()),

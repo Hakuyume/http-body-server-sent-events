@@ -1,6 +1,5 @@
 use crate::Event;
 use bytes::{Buf, BytesMut};
-use futures::Stream;
 use http_body::{Body, Frame};
 use std::collections::VecDeque;
 use std::pin::Pin;
@@ -27,14 +26,15 @@ pub struct Decode<B> {
     events: VecDeque<Event>,
 }
 
-impl<B> Stream for Decode<B>
+impl<B> Decode<B>
 where
     B: Body,
     B::Error: From<Utf8Error>,
 {
-    type Item = Result<Frame<Event>, B::Error>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    pub fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Event>, B::Error>>> {
         let mut this = self.project();
         loop {
             if let Some(event) = this.events.pop_front() {
