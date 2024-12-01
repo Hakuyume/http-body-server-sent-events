@@ -3,6 +3,10 @@ name = "http-body-server-sent-events"
 version = "0.1.0"
 edition = "2021"
 
+description = "server-sent events for http-body"
+license = "BSD-3-Clause"
+repository = "https://github.com/Hakuyume/http-body-server-sent-events"
+
 [dependencies]
 bytes = "1.8.0"
 http-body = "1.0.1"
