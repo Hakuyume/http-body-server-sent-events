@@ -67,6 +67,34 @@ where
             }
         }
     }
+
+    pub fn into_event_stream(self) -> impl futures::Stream<Item = Result<Event, B::Error>> {
+        #[pin_project::pin_project]
+        struct Stream<B>(#[pin] Decode<B>);
+        impl<B> futures::Stream for Stream<B>
+        where
+            B: Body,
+            B::Error: From<Utf8Error>,
+        {
+            type Item = Result<Event, B::Error>;
+            fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+                let mut this = self.project();
+                loop {
+                    match task::ready!(this.0.as_mut().poll_frame(cx)) {
+                        Some(Ok(frame)) => {
+                            if let Ok(event) = frame.into_data() {
+                                break Poll::Ready(Some(Ok(event)));
+                            }
+                        }
+                        Some(Err(e)) => break Poll::Ready(Some(Err(e))),
+                        None => break Poll::Ready(None),
+                    }
+                }
+            }
+        }
+
+        Stream(self)
+    }
 }
 
 fn decode_data(data: &[u8]) -> Result<Option<Event>, Utf8Error> {
