@@ -1,0 +1,12 @@
+event: event
+data: data
+id: id
+retry: 42000
+
+event: foo
+
+data: bar
+
+id: baz
+
+retry: 57000

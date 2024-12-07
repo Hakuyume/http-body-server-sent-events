@@ -5,6 +5,7 @@ use std::collections::VecDeque;
 use std::pin::Pin;
 use std::str::{self, Utf8Error};
 use std::task::{self, Context, Poll};
+use std::time::Duration;
 
 pub fn decode<B>(body: B) -> Decode<B>
 where
@@ -123,8 +124,11 @@ fn decode_data(data: &[u8]) -> Result<Option<Event>, Utf8Error> {
             if let Some(value) = line.strip_prefix("id:") {
                 event.id = Some(value.trim_start().to_owned());
             }
-            if let Some(Ok(value)) = line.strip_prefix("retry:").map(str::parse) {
-                event.event = Some(value);
+            if let Some(Ok(value)) = line
+                .strip_prefix("retry:")
+                .map(|line| line.trim_start().parse())
+            {
+                event.retry = Some(Duration::from_millis(value));
             }
             event
         },

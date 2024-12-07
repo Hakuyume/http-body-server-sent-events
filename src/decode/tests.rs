@@ -6,6 +6,7 @@ use http_body_util::StreamBody;
 use std::future;
 use std::pin;
 use std::str::Utf8Error;
+use std::time::Duration;
 
 async fn check<'a, D, E>(data: D, events_expected: E)
 where
@@ -50,14 +51,12 @@ async fn test_data_only_messages(#[case] chunk_size: usize) {
             Event {
                 event: None,
                 data: Some("some text".to_owned()),
-                id: None,
-                retry: None,
+                ..Event::default()
             },
             Event {
                 event: None,
                 data: Some("another message\nwith two lines".to_owned()),
-                id: None,
-                retry: None,
+                ..Event::default()
             },
         ],
     )
@@ -76,8 +75,7 @@ async fn test_mixing_and_matching(#[case] chunk_size: usize) {
             Event {
                 event: Some("userconnect".to_owned()),
                 data: Some(r#"{"username": "bobby", "time": "02:33:48"}"#.to_owned()),
-                id: None,
-                retry: None,
+                ..Event::default()
             },
             Event {
                 event: None,
@@ -88,8 +86,7 @@ async fn test_mixing_and_matching(#[case] chunk_size: usize) {
                     )
                     .to_owned(),
                 ),
-                id: None,
-                retry: None,
+                ..Event::default()
             },
             Event {
                 event: Some("usermessage".to_owned()),
@@ -100,8 +97,43 @@ async fn test_mixing_and_matching(#[case] chunk_size: usize) {
                         )
                         .to_owned(),
                     ),
-                id: None,
-                retry: None,
+                ..Event::default()
+            },
+        ],
+    )
+    .await;
+}
+
+#[rstest::rstest]
+#[case(4)]
+#[case(16)]
+#[case(64)]
+#[futures_test::test]
+async fn test_all_fields(#[case] chunk_size: usize) {
+    check(
+        include_bytes!("../examples/all_fields.txt").chunks(chunk_size),
+        [
+            Event {
+                event: Some("event".to_owned()),
+                data: Some("data".to_owned()),
+                id: Some("id".to_owned()),
+                retry: Some(Duration::from_secs(42)),
+            },
+            Event {
+                event: Some("foo".to_owned()),
+                ..Event::default()
+            },
+            Event {
+                data: Some("bar".to_owned()),
+                ..Event::default()
+            },
+            Event {
+                id: Some("baz".to_owned()),
+                ..Event::default()
+            },
+            Event {
+                retry: Some(Duration::from_secs(57)),
+                ..Event::default()
             },
         ],
     )
