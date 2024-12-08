@@ -1,0 +1,8 @@
+: https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation
+
+data
+
+data
+data
+
+data:

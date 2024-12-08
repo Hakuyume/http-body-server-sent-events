@@ -1,0 +1,6 @@
+: https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation
+
+data: YHOO
+data: +2
+data: 10
+

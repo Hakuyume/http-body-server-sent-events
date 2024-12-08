@@ -1,52 +1,123 @@
 use crate::Event;
 use bytes::Bytes;
-use futures_test::stream::StreamTestExt;
-use http_body::Frame;
-use http_body_util::StreamBody;
+use http_body_util::{BodyExt, Full};
 use std::future;
-use std::pin;
+use std::pin::Pin;
 use std::str::Utf8Error;
 use std::time::Duration;
 
-async fn check<'a, D, E>(data: D, events_expected: E)
+async fn check<E>(body: &'static [u8], events: E)
 where
-    D: IntoIterator<Item = &'a [u8]>,
     E: IntoIterator<Item = Event>,
 {
-    let body = StreamBody::new(
-        futures::stream::iter(
-            data.into_iter()
-                .map(Bytes::copy_from_slice)
-                .map(Frame::data)
-                .map(Ok::<_, Utf8Error>),
-        )
-        .interleave_pending(),
-    );
-    let mut events_actual = pin::pin!(super::decode(body));
-    for event_expected in events_expected {
+    let body = Full::<Bytes>::from(body).map_err(|_| -> Utf8Error { unreachable!() });
+    let mut decode = super::decode(body);
+    for event in events {
         assert_eq!(
-            future::poll_fn(|cx| events_actual.as_mut().poll_frame(cx))
+            future::poll_fn(|cx| Pin::new(&mut decode).poll_frame(cx))
                 .await
                 .unwrap()
                 .unwrap()
                 .into_data()
                 .unwrap(),
-            event_expected,
+            event,
         )
     }
-    assert!(future::poll_fn(|cx| events_actual.as_mut().poll_frame(cx))
+    assert!(future::poll_fn(|cx| Pin::new(&mut decode).poll_frame(cx))
         .await
         .is_none())
 }
 
-#[rstest::rstest]
-#[case(4)]
-#[case(16)]
-#[case(64)]
 #[futures_test::test]
-async fn test_data_only_messages(#[case] chunk_size: usize) {
+async fn test_all_fields() {
     check(
-        include_bytes!("../examples/data_only_messages.txt").chunks(chunk_size),
+        include_bytes!("../examples/all_fields.txt"),
+        [
+            Event {
+                event: Some("event".to_owned()),
+                data: Some("data".to_owned()),
+                id: Some("id".to_owned()),
+                retry: Some(Duration::from_secs(42)),
+            },
+            Event {
+                event: Some("foo".to_owned()),
+                ..Event::default()
+            },
+            Event {
+                data: Some("bar".to_owned()),
+                ..Event::default()
+            },
+            Event {
+                id: Some("baz".to_owned()),
+                ..Event::default()
+            },
+            Event {
+                retry: Some(Duration::from_secs(57)),
+                ..Event::default()
+            },
+        ],
+    )
+    .await;
+}
+
+#[futures_test::test]
+async fn test_html_living_standard_0() {
+    check(
+        include_bytes!("../examples/html_living_standard_0.txt"),
+        [Event {
+            data: Some("YHOO\n+2\n10".to_owned()),
+            ..Event::default()
+        }],
+    )
+    .await;
+}
+
+#[futures_test::test]
+async fn test_html_living_standard_1() {
+    check(
+        include_bytes!("../examples/html_living_standard_1.txt"),
+        [
+            Event {
+                data: Some("first event".to_owned()),
+                id: Some("1".to_owned()),
+                ..Event::default()
+            },
+            Event {
+                data: Some("second event".to_owned()),
+                id: Some("".to_owned()),
+                ..Event::default()
+            },
+            Event {
+                data: Some(" third event".to_owned()),
+                ..Event::default()
+            },
+        ],
+    )
+    .await;
+}
+
+#[futures_test::test]
+async fn test_html_living_standard_2() {
+    check(
+        include_bytes!("../examples/html_living_standard_2.txt"),
+        [
+            Event {
+                data: Some("".to_owned()),
+                ..Event::default()
+            },
+            Event {
+                data: Some("\n".to_owned()),
+                ..Event::default()
+            },
+        ],
+    )
+    .await;
+}
+
+#[futures_test::test]
+async fn test_data_only_messages() {
+    check(
+        include_bytes!("../examples/data_only_messages.txt"),
         [
             Event {
                 event: None,
@@ -63,14 +134,10 @@ async fn test_data_only_messages(#[case] chunk_size: usize) {
     .await;
 }
 
-#[rstest::rstest]
-#[case(4)]
-#[case(16)]
-#[case(64)]
 #[futures_test::test]
-async fn test_mixing_and_matching(#[case] chunk_size: usize) {
+async fn test_mixing_and_matching() {
     check(
-        include_bytes!("../examples/mixing_and_matching.txt").chunks(chunk_size),
+        include_bytes!("../examples/mixing_and_matching.txt"),
         [
             Event {
                 event: Some("userconnect".to_owned()),
@@ -97,42 +164,6 @@ async fn test_mixing_and_matching(#[case] chunk_size: usize) {
                         )
                         .to_owned(),
                     ),
-                ..Event::default()
-            },
-        ],
-    )
-    .await;
-}
-
-#[rstest::rstest]
-#[case(4)]
-#[case(16)]
-#[case(64)]
-#[futures_test::test]
-async fn test_all_fields(#[case] chunk_size: usize) {
-    check(
-        include_bytes!("../examples/all_fields.txt").chunks(chunk_size),
-        [
-            Event {
-                event: Some("event".to_owned()),
-                data: Some("data".to_owned()),
-                id: Some("id".to_owned()),
-                retry: Some(Duration::from_secs(42)),
-            },
-            Event {
-                event: Some("foo".to_owned()),
-                ..Event::default()
-            },
-            Event {
-                data: Some("bar".to_owned()),
-                ..Event::default()
-            },
-            Event {
-                id: Some("baz".to_owned()),
-                ..Event::default()
-            },
-            Event {
-                retry: Some(Duration::from_secs(57)),
                 ..Event::default()
             },
         ],
