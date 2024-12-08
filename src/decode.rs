@@ -100,39 +100,31 @@ where
 
 fn decode_data(data: &[u8]) -> Result<Option<Event>, Utf8Error> {
     let data = str::from_utf8(data)?;
-    let event = data.lines().fold(
-        Event {
-            event: None,
-            data: None,
-            id: None,
-            retry: None,
-        },
-        |mut event, line| {
-            if let Some(value) = line.strip_prefix("event:") {
-                event.event = Some(value.trim_start().to_owned());
-            }
-            if let Some(line) = line.strip_prefix("data:") {
-                let data = match &mut event.data {
-                    Some(data) => {
-                        data.push('\n');
-                        data
-                    }
-                    None => event.data.insert(String::new()),
-                };
-                data.push_str(line.trim_start());
-            }
-            if let Some(value) = line.strip_prefix("id:") {
-                event.id = Some(value.trim_start().to_owned());
-            }
-            if let Some(Ok(value)) = line
-                .strip_prefix("retry:")
-                .map(|line| line.trim_start().parse())
-            {
-                event.retry = Some(Duration::from_millis(value));
-            }
-            event
-        },
-    );
+    let event = data.lines().fold(Event::default(), |mut event, line| {
+        if let Some(value) = line.strip_prefix("event:") {
+            event.event = Some(value.trim_start().to_owned());
+        }
+        if let Some(line) = line.strip_prefix("data:") {
+            let data = match &mut event.data {
+                Some(data) => {
+                    data.push('\n');
+                    data
+                }
+                None => event.data.insert(String::new()),
+            };
+            data.push_str(line.trim_start());
+        }
+        if let Some(value) = line.strip_prefix("id:") {
+            event.id = Some(value.trim_start().to_owned());
+        }
+        if let Some(Ok(value)) = line
+            .strip_prefix("retry:")
+            .map(|line| line.trim_start().parse())
+        {
+            event.retry = Some(Duration::from_millis(value));
+        }
+        event
+    });
     if event.event.is_some() || event.data.is_some() || event.id.is_some() || event.retry.is_some()
     {
         Ok(Some(event))
